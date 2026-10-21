@@ -117,16 +117,10 @@ app.post('/api/auth/send-otp', async (req, res) => {
 
     await user.save();
 
-    // Send email via Gmail SMTP (port 465 SSL)
-    try {
-      await sendOTPEmail(normalizedEmail, otpCode);
-    } catch (mailErr) {
-      console.error(`[send-otp:error] SMTP delivery failed to ${normalizedEmail}:`, mailErr.message);
-      return res.status(500).json({
-        success: false,
-        error: `Could not send verification email: ${mailErr.message}. Check spam folder or server email settings.`
-      });
-    }
+    // Dispatch email asynchronously via pooled SMTP connection (Instant UI response)
+    sendOTPEmail(normalizedEmail, otpCode).catch(mailErr => {
+      console.error(`[send-otp:error] Background SMTP delivery failed to ${normalizedEmail}:`, mailErr.message);
+    });
 
     res.json({
       success: true,
