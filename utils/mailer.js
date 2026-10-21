@@ -55,7 +55,29 @@ async function sendOTPEmail(toEmail, otpCode) {
     </div>
   `;
 
-  // 1. Resend REST API (HTTPS Port 443 - 100% bypasses Render SMTP port blocks)
+  // 1. Google Mail Webhook Gateway (HTTPS Port 443 - 100% Free, No Custom Domain Required, Sends from your Gmail to ANY recipient!)
+  const googleWebhook = (process.env.GOOGLE_MAIL_WEBHOOK || '').trim();
+  if (googleWebhook) {
+    try {
+      const res = await fetch(googleWebhook, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: toEmail,
+          subject: `Your DadAI Verification Code: ${otpCode}`,
+          html: htmlBody
+        })
+      });
+      if (res.ok) {
+        console.log(`[mailer:google-script] Email successfully dispatched via Google Webhook to ${toEmail}`);
+        return true;
+      }
+    } catch (gErr) {
+      console.warn(`[mailer:google-script] Webhook dispatch error:`, gErr.message);
+    }
+  }
+
+  // 2. Resend REST API (HTTPS Port 443 - Works for account owner or verified domains)
   const resendApiKey = (process.env.RESEND_API_KEY || '').trim();
   if (resendApiKey) {
     try {
