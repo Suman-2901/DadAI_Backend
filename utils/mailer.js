@@ -1,42 +1,9 @@
-const nodemailer = require('nodemailer');
-
-let cachedTransporter = null;
-
-function getTransporter() {
-  if (cachedTransporter) return cachedTransporter;
-
-  const user = (process.env.GMAIL_USER || process.env.EMAIL_USER || '').trim();
-  const rawPass = (process.env.GMAIL_APP_PASS || process.env.EMAIL_PASS || '').trim();
-  const pass = rawPass.replace(/^["']|["']$/g, '').replace(/\s+/g, '');
-
-  if (!user || !pass) return null;
-
-  cachedTransporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    pool: true,
-    connectionTimeout: 4000,
-    greetingTimeout: 4000,
-    socketTimeout: 4000,
-    auth: {
-      user,
-      pass
-    },
-    tls: {
-      rejectUnauthorized: false
-    }
-  });
-
-  return cachedTransporter;
-}
-
 /**
- * Sends a 6-digit OTP verification code.
- * - Supports Resend REST API (HTTPS port 443) which Render free tier never blocks.
- * - Supports Gmail SMTP with 4s timeout fallback.
- * - Always logs the OTP prominently to Render console logs so you are never locked out!
+ * DadAI Mailer Gateway
+ * Sends OTP verification emails using Google Apps Script Webhook (Port 443 HTTPS).
+ * 100% Free, no custom domain required, sends directly from your personal/workspace Gmail!
  */
+
 async function sendOTPEmail(toEmail, otpCode) {
   // Always log prominently to server console so you can see it in Render dashboard
   console.log(`\n========================================`);
@@ -55,7 +22,7 @@ async function sendOTPEmail(toEmail, otpCode) {
     </div>
   `;
 
-  // 1. Google Mail Webhook Gateway (HTTPS Port 443 - 100% Free, No Custom Domain Required, Sends from your Gmail to ANY recipient!)
+  // Google Mail Webhook Gateway (HTTPS Port 443 - 100% Free, No Custom Domain Required, Sends from Gmail to ANY recipient!)
   const googleWebhook = (process.env.GOOGLE_MAIL_WEBHOOK || '').trim();
   if (googleWebhook) {
     try {
@@ -71,61 +38,18 @@ async function sendOTPEmail(toEmail, otpCode) {
       if (res.ok) {
         console.log(`[mailer:google-script] Email successfully dispatched via Google Webhook to ${toEmail}`);
         return true;
+      } else {
+        const text = await res.text();
+        console.warn(`[mailer:google-script] Webhook returned status ${res.status}: ${text}`);
       }
     } catch (gErr) {
       console.warn(`[mailer:google-script] Webhook dispatch error:`, gErr.message);
     }
-  }
-
-  // 2. Resend REST API (HTTPS Port 443 - Works for account owner or verified domains)
-  const resendApiKey = (process.env.RESEND_API_KEY || '').trim();
-  if (resendApiKey) {
-    try {
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${resendApiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          from: 'DadAI <onboarding@resend.dev>',
-          to: [toEmail],
-          subject: `Your DadAI Verification Code: ${otpCode}`,
-          html: htmlBody
-        })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        console.log(`[mailer:resend] Email delivered via Resend API to ${toEmail}. ID: ${data.id}`);
-        return true;
-      } else {
-        console.warn(`[mailer:resend] Resend API error:`, data);
-      }
-    } catch (e) {
-      console.warn(`[mailer:resend] Failed to call Resend API:`, e.message);
-    }
-  }
-
-  // 2. Gmail SMTP with strict 4s timeout (Note: Render free tier blocks ports 25, 465, 587)
-  const transporter = getTransporter();
-  if (transporter) {
-    try {
-      const mailOptions = {
-        from: `"DadAI Activation" <${process.env.GMAIL_USER || process.env.EMAIL_USER}>`,
-        to: toEmail,
-        subject: `Your DadAI Verification Code: ${otpCode}`,
-        html: htmlBody
-      };
-      const info = await transporter.sendMail(mailOptions);
-      console.log(`[mailer:smtp] Email delivered via Gmail SMTP to ${toEmail}. MessageId: ${info.messageId}`);
-      return true;
-    } catch (smtpErr) {
-      console.warn(`[mailer:smtp] SMTP failed (${smtpErr.message}). Render free tier blocks outbound SMTP ports 465/587.`);
-    }
+  } else {
+    console.warn(`[mailer] GOOGLE_MAIL_WEBHOOK is not set in environment variables. OTP logged to console above.`);
   }
 
   return true;
 }
 
 module.exports = { sendOTPEmail };
-

@@ -117,9 +117,9 @@ app.post('/api/auth/send-otp', async (req, res) => {
 
     await user.save();
 
-    // Dispatch email asynchronously via pooled SMTP connection (Instant UI response)
+    // Dispatch email asynchronously via Google Webhook (Instant UI response)
     sendOTPEmail(normalizedEmail, otpCode).catch(mailErr => {
-      console.error(`[send-otp:error] Background SMTP delivery failed to ${normalizedEmail}:`, mailErr.message);
+      console.error(`[send-otp:error] Background email delivery failed to ${normalizedEmail}:`, mailErr.message);
     });
 
     res.json({
